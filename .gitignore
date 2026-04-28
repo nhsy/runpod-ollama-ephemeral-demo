@@ -1,0 +1,35 @@
+# Secrets and sensitive config
+.env
+.env.local
+terraform.tfvars
+terraform.tfvars.json
+
+# Terraform state and working directory
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# RunPod pod ID
+.pod_id
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs and temp
+*.log
+*.bak
+/.tmp/

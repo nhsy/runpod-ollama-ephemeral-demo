@@ -1,0 +1,299 @@
+# https://taskfile.dev
+version: "3"
+
+dotenv:
+  - .env   # RUNPOD_API_KEY
+
+vars:
+  POD_ID:
+    sh: cat .pod_id 2>/dev/null || true
+  SSH_HOST: runpod-ollama
+
+tasks:
+
+  # ── Lifecycle ──────────────────────────────────────────────────────────────
+
+  up:
+    desc: "Deploy pod, wait for SSH, configure tunnel, wait for models"
+    cmds:
+      - task: tf-apply
+      - task: wait
+      - task: ssh-config
+      - task: tunnel
+      - task: wait-models
+
+  down:
+    desc: "Destroy pod — zero ongoing cost"
+    cmds:
+      - terraform destroy -auto-approve
+      - echo "Pod destroyed. No storage billing."
+
+  redeploy:
+    desc: "Destroy and redeploy (picks up MODELS changes etc)"
+    cmds:
+      - task: down
+      - task: up
+
+  # ── Lint ───────────────────────────────────────────────────────────────────
+
+  lint:
+    desc: "Run all linting: shellcheck, terraform validate, terraform fmt, tflint"
+    cmds:
+      - shellcheck scripts/*.sh
+      - terraform validate
+      - terraform fmt -check
+      - tflint
+
+  # ── Terraform ──────────────────────────────────────────────────────────────
+
+  init:
+    desc: "terraform init (first time only)"
+    cmds:
+      - terraform init
+
+  tf-apply:
+    desc: "Deploy pod via Terraform"
+    cmds:
+      - terraform apply -auto-approve
+      - echo "Pod ID → $(cat .pod_id)"
+
+  tf-plan:
+    desc: "Preview changes without applying"
+    cmds:
+      - terraform plan
+
+  # ── SSH & Tunnel ───────────────────────────────────────────────────────────
+
+  wait:
+    desc: "Poll until runpodctl ssh info returns an SSH command (max 15 min)"
+    silent: true
+    vars:
+      POD_ID:
+        sh: cat .pod_id
+    cmds:
+      - |
+        echo "Waiting for pod {{.POD_ID}} SSH to be ready..."
+        for i in $(seq 1 90); do
+          SSH_CMD=$(runpodctl ssh info "{{.POD_ID}}" 2>/dev/null | jq -r '.ssh_command // empty')
+          if [[ -n "$SSH_CMD" ]]; then
+            echo "SSH ready: $SSH_CMD"
+            exit 0
+          fi
+          echo "  Attempt $i/90 — not ready yet, retrying in 10s..."
+          sleep 10
+        done
+        echo "Timed out waiting for SSH." && exit 1
+
+  ssh-config:
+    desc: "Fetch IP+port via runpodctl, patch ~/.ssh/config"
+    vars:
+      POD_ID:
+        sh: cat .pod_id
+    cmds:
+      - ./scripts/fetch-ssh.sh {{.POD_ID}}
+
+  ssh:
+    desc: "Open interactive SSH session"
+    cmds:
+      - ssh {{.SSH_HOST}}
+
+  start:
+    desc: "Start stopped pod"
+    cmds:
+      - runpodctl pod start {{ .POD_ID }}
+
+  stop:
+    desc: "Stop pod and close tunnel"
+    cmds:
+      - task: tunnel:stop
+      - runpodctl pod stop {{ .POD_ID }}
+
+  tunnel:
+    desc: "Open Ollama tunnel in background, bound to 0.0.0.0 so Docker containers can reach it"
+    silent: true
+    cmds:
+      - |
+        if ss -tlnp 2>/dev/null | grep -q ':11434 ' || lsof -iTCP:11434 -sTCP:LISTEN 2>/dev/null | grep -q .; then
+          echo "Port 11434 is already in use — tunnel may already be active. Run 'task tunnel:stop' first."
+          exit 1
+        fi
+        ssh -N -f -o ExitOnForwardFailure=yes \
+          -S ~/.ssh/runpod-ollama.sock \
+          -L 0.0.0.0:11434:127.0.0.1:11434 {{.SSH_HOST}}
+        echo "Tunnel active — Ollama at http://localhost:11434 (Docker: http://host.docker.internal:11434)"
+
+  forward:
+    desc: "Forward Ollama port 11434 to localhost (explicit -L, no shell)"
+    cmds:
+      - ssh -N -f -L 11434:127.0.0.1:11434 {{.SSH_HOST}}
+      - echo "Ollama forwarded → http://localhost:11434"
+
+  tunnel:stop:
+    desc: "Close background SSH tunnel"
+    cmds:
+      - ssh -O stop -S ~/.ssh/runpod-ollama.sock {{.SSH_HOST}} 2>/dev/null || true
+      - rm -f ~/.ssh/runpod-ollama.sock
+      - echo "Tunnel closed."
+
+  wait-models:
+    desc: "Poll Ollama until all models are downloaded"
+    cmds:
+      - ./scripts/wait-for-models.sh
+
+  # ── Verification ───────────────────────────────────────────────────────────
+
+  verify:
+    desc: "Confirm Ollama is reachable through the tunnel"
+    silent: true
+    cmds:
+      - |
+        echo "Version:"
+        curl -sf http://localhost:11434/api/version | jq .
+        echo ""
+        echo "Models loaded:"
+        curl -sf http://localhost:11434/api/tags | jq '[.models[].name]'
+
+  status:
+    desc: "Show pod status and current SSH endpoint"
+    silent: true
+    vars:
+      POD_ID:
+        sh: cat .pod_id 2>/dev/null || echo ""
+    cmds:
+      - |
+        if [ -z "{{.POD_ID}}" ]; then
+          echo "No .pod_id — no pod deployed."
+          exit 0
+        fi
+        echo "Pod: {{.POD_ID}}"
+        SSH_INFO=$(runpodctl ssh info "{{.POD_ID}}" 2>/dev/null | jq -r '.ssh_command // empty')
+        if [[ -n "$SSH_INFO" ]]; then
+          echo "SSH: $SSH_INFO"
+          echo "Tunnel connects via: ssh {{.SSH_HOST}}"
+        else
+          echo "Status: not yet ready (pod may be starting)"
+        fi
+
+  # ── Models ─────────────────────────────────────────────────────────────────
+
+  gpu:
+    desc: "Show available RunPod GPUs with pricing. Args: MIN_VRAM=24 CLOUD=community SORT=price LOCATION=EU|all"
+    vars:
+      MIN_VRAM: '{{.MIN_VRAM | default "24"}}'
+      CLOUD: '{{.CLOUD | default "community"}}'
+      SORT: '{{.SORT | default "price"}}'
+      LOCATION: '{{.LOCATION | default ""}}'
+    cmds:
+      - |
+        uv run python scripts/gpu-availability.py --min-vram {{.MIN_VRAM}} --cloud {{.CLOUD}} --sort {{.SORT}} \
+          {{if and .LOCATION (ne .LOCATION "all")}}--location {{.LOCATION}}{{end}}
+
+  models:
+    desc: "List models loaded in Ollama (tunnel must be active)"
+    cmds:
+      - curl -sf http://localhost:11434/api/tags | jq '[.models[] | {name, size}]'
+
+  unload:
+    desc: "Unload a model from VRAM. Usage: task unload MODEL=glm-4.7-flash"
+    silent: true
+    vars:
+      MODEL: '{{.MODEL | default ""}}'
+    cmds:
+      - |
+        if [ -z "{{.MODEL}}" ]; then
+          echo "Usage: task unload MODEL=<model-name>"
+          exit 1
+        fi
+        curl -sf http://localhost:11434/api/generate \
+          -d '{"model":"{{.MODEL}}","keep_alive":0}' | jq .
+        echo "Unloaded {{.MODEL}}"
+
+  bench:
+    desc: "Benchmark loaded models — GPU info, t/s, tool call reliability"
+    silent: true
+    vars:
+      MODELS: '{{.MODELS | default "qwen3.6:27b"}}'
+    cmds:
+      - |
+        # --- GPU info ---
+        echo "=== GPU ==="
+        ssh {{.SSH_HOST}} "nvidia-smi --query-gpu=name,memory.total,memory.free,driver_version \
+          --format=csv,noheader,nounits \
+          | awk -F', ' '{printf \"Card:    %s\nVRAM:    %s MB total / %s MB free\nDriver:  %s\n\", \$1,\$2,\$3,\$4}'"
+        echo ""
+
+        # --- Per-model benchmarks ---
+        echo "=== Model Benchmarks (via tunnel) ==="
+        IFS=',' read -ra MODEL_LIST <<< "{{.MODELS}}"
+        for MODEL in "${MODEL_LIST[@]}"; do
+          echo "--- $MODEL ---"
+
+          # Speed: fixed prompt, 400 tokens out, 32K ctx
+          RESULT=$(curl -sf http://localhost:11434/api/generate \
+            -d "{
+              \"model\": \"$MODEL\",
+              \"prompt\": \"Write a complete Terraform module for an AWS VPC with public and private subnets, NAT gateway, and route tables. Include all resource dependencies and outputs.\",
+              \"options\": {\"num_ctx\": 32768, \"num_predict\": 400},
+              \"stream\": false
+            }")
+
+          TPS=$(echo "$RESULT" | jq '(.eval_count / .eval_duration * 1e9) | round')
+          TOKENS=$(echo "$RESULT" | jq '.eval_count')
+          echo "  Speed:       ${TPS} t/s  (${TOKENS} tokens)"
+
+          # VRAM while loaded
+          VRAM_USED=$(ssh {{.SSH_HOST}} "nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits")
+          echo "  VRAM used:   ${VRAM_USED} MB"
+
+          # Tool call reliability: 3 attempts
+          PASS=0
+          for i in 1 2 3; do
+            TC=$(curl -s http://localhost:11434/api/chat \
+              -d "{
+                \"model\": \"$MODEL\",
+                \"messages\": [{\"role\": \"user\", \"content\": \"Read the file /tmp/hello.py\"}],
+                \"tools\": [{
+                  \"type\": \"function\",
+                  \"function\": {
+                    \"name\": \"read_file\",
+                    \"description\": \"Read a file from disk\",
+                    \"parameters\": {
+                      \"type\": \"object\",
+                      \"properties\": {\"path\": {\"type\": \"string\"}},
+                      \"required\": [\"path\"]
+                    }
+                  }
+                }],
+                \"stream\": false
+              }" 2>/dev/null | jq '.message.tool_calls // [] | length' 2>/dev/null) || TC=0
+            [[ "${TC:-0}" -gt 0 ]] && PASS=$((PASS + 1))
+          done
+          echo "  Tool calls:  ${PASS}/3"
+
+          # Unload before next model to avoid VRAM overlap
+          curl -s http://localhost:11434/api/generate \
+            -d "{\"model\": \"$MODEL\", \"keep_alive\": 0}" > /dev/null || true
+          echo ""
+        done
+
+  # ── Cost ───────────────────────────────────────────────────────────────────
+
+  cost:
+    desc: "Estimated session cost so far"
+    silent: true
+    vars:
+      POD_ID:
+        sh: cat .pod_id 2>/dev/null || echo ""
+      RATE:
+        sh: echo "${COST_RATE:-0.34}"
+    cmds:
+      - |
+        if [ -z "{{.POD_ID}}" ]; then echo "No pod running."; exit 0; fi
+        UPTIME=$(curl -sf \
+          -X POST -H "content-type: application/json" \
+          "https://api.runpod.io/graphql?api_key=${RUNPOD_API_KEY}" \
+          -d "{\"query\":\"query { pod(input:{podId:\\\"{{.POD_ID}}\\\"}){ runtime { uptimeInSeconds } } }\"}" \
+          | jq '.data.pod.runtime.uptimeInSeconds // 0')
+        HOURS=$(awk "BEGIN { printf \"%.2f\", $UPTIME/3600 }")
+        COST=$(awk "BEGIN { printf \"%.4f\", $HOURS*{{.RATE}} }")
+        echo "Uptime: ${HOURS}h  |  Cost: ~\$$COST (@ \${{.RATE}}/hr)"
