@@ -1,0 +1,5 @@
+runpod_api_key = "rp_xxxxxxxxxxxxxxxxxxxx"
+ssh_public_keys = [
+  "ssh-ed25519 AAAAC3... your-comment",
+]
+ollama_models  = "gemma4:e4b,qwen3.6:27b"

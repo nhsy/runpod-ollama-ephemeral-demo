@@ -15,6 +15,7 @@ tasks:
 
   up:
     desc: "Deploy pod, wait for SSH, configure tunnel, wait for models"
+    deps: [deps]
     cmds:
       - task: tf-apply
       - task: wait
@@ -24,6 +25,7 @@ tasks:
 
   down:
     desc: "Destroy pod — zero ongoing cost"
+    deps: [deps]
     cmds:
       - terraform destroy -auto-approve
       - echo "Pod destroyed. No storage billing."
@@ -33,6 +35,25 @@ tasks:
     cmds:
       - task: down
       - task: up
+
+  # ── Dependencies ───────────────────────────────────────────────────────────
+
+  deps:
+    desc: "Check required CLI tools are installed: terraform, runpodctl, jq"
+    silent: true
+    cmds:
+      - |
+        missing=()
+        for cmd in terraform runpodctl jq; do
+          if ! command -v "$cmd" &>/dev/null; then
+            missing+=("$cmd")
+          fi
+        done
+        if [[ ${#missing[@]} -gt 0 ]]; then
+          echo "Missing required tools: ${missing[*]}"
+          exit 1
+        fi
+        echo "All dependencies found: terraform runpodctl jq"
 
   # ── Lint ───────────────────────────────────────────────────────────────────
 
@@ -48,6 +69,7 @@ tasks:
 
   init:
     desc: "terraform init (first time only)"
+    deps: [deps]
     cmds:
       - terraform init
 

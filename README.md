@@ -85,12 +85,4 @@ TF_VAR_ollama_models="gemma4:e4b" task up
 - Q4_K_M quantized: ~18 GB
 - Recommended: 60 GB+ for best performance
 
-## Cost
-
-Costs vary by GPU. Examples (on-demand pricing):
-- RTX A6000: ~$0.33/hour
-- L40S: ~$0.79/hour
-- A100 PCIe: ~$1.19/hour
-- RTX PRO 6000 Blackwell: ~$1.69/hour
-
 Zero idle cost — `task down` destroys the pod completely.
