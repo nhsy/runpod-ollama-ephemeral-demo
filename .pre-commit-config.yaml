@@ -10,12 +10,10 @@ repos:
       - id: terraform_validate
 
   # Bash shellcheck
-  - repo: https://github.com/openstack/bashate
-    rev: 2.1.1
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
     hooks:
-      - id: bashate
-        args:
-          - --ignore=E006,E042  # Ignore line length and double curlies
+      - id: shellcheck
 
   # YAML linting
   - repo: https://github.com/adrienverge/yamllint.git
@@ -50,7 +48,7 @@ repos:
         language_version: python3
 
   # Python style checks
-  - repo: https://github.com/pycqa/flake8
-    rev: 7.3.0
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.12
     hooks:
-      - id: flake8
+      - id: ruff

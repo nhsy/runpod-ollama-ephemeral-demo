@@ -11,14 +11,14 @@ SSH_HOST_ALIAS="runpod-ollama"
 
 # Validate JSON output from runpodctl
 INFO=$(runpodctl ssh info "$POD_ID" 2>/dev/null) || {
-  echo "Error: runpodctl ssh info failed for pod $POD_ID" >&2
-  exit 1
+    echo "Error: runpodctl ssh info failed for pod $POD_ID" >&2
+    exit 1
 }
 
 # Check if output is valid JSON
 if ! echo "$INFO" | jq empty 2>/dev/null; then
-  echo "Error: invalid JSON from runpodctl" >&2
-  exit 1
+    echo "Error: invalid JSON from runpodctl" >&2
+    exit 1
 fi
 
 # Extract fields
@@ -27,13 +27,13 @@ POD_PORT=$(echo "$INFO" | jq -r '.port // empty')
 
 # Validate we have required fields
 if [[ -z "$POD_IP" ]]; then
-  echo "Error: could not parse IP from runpodctl output" >&2
-  exit 1
+    echo "Error: could not parse IP from runpodctl output" >&2
+    exit 1
 fi
 
 if [[ -z "$POD_PORT" ]]; then
-  echo "Error: could not parse port from runpodctl output" >&2
-  exit 1
+    echo "Error: could not parse port from runpodctl output" >&2
+    exit 1
 fi
 
 echo "Pod $POD_ID → $POD_IP:$POD_PORT"
@@ -45,25 +45,25 @@ TEMP_CONFIG=$(mktemp)
 trap 'rm -f "$TEMP_CONFIG"' EXIT
 
 if grep -q "^Host ${SSH_HOST_ALIAS}$" "$SSH_CONFIG" 2>/dev/null; then
-  # Update existing host block
-  awk -v alias="$SSH_HOST_ALIAS" -v ip="$POD_IP" -v port="$POD_PORT" '
-    /^Host / { in_target = ($0 == "Host " alias) }
-    in_target && /^[[:space:]]+HostName / { print "  HostName " ip; next }
-    in_target && /^[[:space:]]+Port / { print "  Port " port; next }
-    { print }
-  ' "$SSH_CONFIG" > "$TEMP_CONFIG"
+    # Update existing host block
+    awk -v alias="$SSH_HOST_ALIAS" -v ip="$POD_IP" -v port="$POD_PORT" '
+        /^Host / { in_target = ($0 == "Host " alias) }
+        in_target && /^[[:space:]]+HostName / { print "  HostName " ip; next }
+        in_target && /^[[:space:]]+Port / { print "  Port " port; next }
+        { print }
+    ' "$SSH_CONFIG" > "$TEMP_CONFIG"
 
-  # Only overwrite if changes were made
-  if ! cmp -s "$TEMP_CONFIG" "$SSH_CONFIG"; then
-    mv "$TEMP_CONFIG" "$SSH_CONFIG"
-    trap - EXIT
-    echo "Updated '${SSH_HOST_ALIAS}' in ${SSH_CONFIG}"
-  else
-    echo "No changes needed for '${SSH_HOST_ALIAS}'"
-  fi
+    # Only overwrite if changes were made
+    if ! cmp -s "$TEMP_CONFIG" "$SSH_CONFIG"; then
+        mv "$TEMP_CONFIG" "$SSH_CONFIG"
+        trap - EXIT
+        echo "Updated '${SSH_HOST_ALIAS}' in ${SSH_CONFIG}"
+    else
+        echo "No changes needed for '${SSH_HOST_ALIAS}'"
+    fi
 else
-  # Append new host block
-  cat >> "$SSH_CONFIG" << EOF
+    # Append new host block
+    cat >> "$SSH_CONFIG" << EOF
 
 Host ${SSH_HOST_ALIAS}
   HostName ${POD_IP}
@@ -78,7 +78,7 @@ Host ${SSH_HOST_ALIAS}
   ControlPersist 10m
   StrictHostKeyChecking accept-new
 EOF
-  echo "Appended '${SSH_HOST_ALIAS}' to ${SSH_CONFIG}"
+    echo "Appended '${SSH_HOST_ALIAS}' to ${SSH_CONFIG}"
 fi
 
 echo "Connect: ssh ${SSH_HOST_ALIAS}"

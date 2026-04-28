@@ -16,7 +16,6 @@ Reads RUNPOD_API_KEY from environment or .env file in the project root.
 """
 
 import argparse
-import json
 import os
 import sys
 import time
@@ -26,7 +25,10 @@ from typing import Optional
 try:
     import requests
 except ImportError:
-    print("Error: requests library not installed. Run: pip install requests", file=sys.stderr)
+    print(
+        "Error: requests library not installed. Run: pip install requests",
+        file=sys.stderr,
+    )
     sys.exit(1)
 
 
@@ -44,7 +46,21 @@ LOCATION_REGIONS: dict[str, list[str]] = {
     "EU": ["CZ", "DE", "FR", "IS", "NL", "NO", "PL", "RO", "SE"],
 }
 # All individual country codes (for validation)
-ALL_COUNTRY_CODES: set[str] = {"AU", "CA", "CZ", "DE", "FR", "IS", "JP", "NL", "NO", "PL", "RO", "SE", "US"}
+ALL_COUNTRY_CODES: set[str] = {
+    "AU",
+    "CA",
+    "CZ",
+    "DE",
+    "FR",
+    "IS",
+    "JP",
+    "NL",
+    "NO",
+    "PL",
+    "RO",
+    "SE",
+    "US",
+}
 
 QUERY = """
 query GpuTypes($countryCode: String) {
@@ -136,7 +152,10 @@ def make_graphql_request(
             # Handle GraphQL errors
             if "errors" in body:
                 for err in body["errors"]:
-                    print(f"API error: {err.get('message', 'Unknown error')}", file=sys.stderr)
+                    print(
+                        f"API error: {err.get('message', 'Unknown error')}",
+                        file=sys.stderr,
+                    )
                 sys.exit(1)
 
             return body
@@ -172,7 +191,9 @@ def make_graphql_request(
     sys.exit(1)
 
 
-def fetch_gpu_types(api_key: str, country_codes: Optional[list[str]] = None) -> list[dict]:
+def fetch_gpu_types(
+    api_key: str, country_codes: Optional[list[str]] = None
+) -> list[dict]:
     """Fetch GPU types from RunPod API, optionally filtered to specific country codes.
 
     For multiple country codes (e.g. EU region), queries each country separately and
@@ -202,8 +223,12 @@ def fetch_gpu_types(api_key: str, country_codes: Optional[list[str]] = None) -> 
                 # Keep the lowest non-null price across countries
                 existing_lp = merged[gpu_id].get("lowestPrice") or {}
                 merged[gpu_id]["lowestPrice"] = {
-                    "minimumBidPrice": _min_price(existing_lp.get("minimumBidPrice"), spot),
-                    "uninterruptablePrice": _min_price(existing_lp.get("uninterruptablePrice"), on_dem),
+                    "minimumBidPrice": _min_price(
+                        existing_lp.get("minimumBidPrice"), spot
+                    ),
+                    "uninterruptablePrice": _min_price(
+                        existing_lp.get("uninterruptablePrice"), on_dem
+                    ),
                 }
 
     return list(merged.values())
@@ -301,7 +326,9 @@ def main() -> None:
     results.sort(key=sort_key)
 
     if not results:
-        print(f"No GPUs found matching filters (min-vram={args.min_vram}, cloud={args.cloud})")
+        print(
+            f"No GPUs found matching filters (min-vram={args.min_vram}, cloud={args.cloud})"
+        )
         return
 
     # Print table
@@ -341,7 +368,11 @@ def main() -> None:
 
     print()
     loc_label = args.location.upper() if args.location else "global"
-    print(f"  {len(results)} GPUs shown | cloud={args.cloud} | min-vram={args.min_vram}GB | location={loc_label} | sorted by {args.sort}")
+    print(
+        f"  {len(results)} GPUs shown | cloud={args.cloud}"
+        f" | min-vram={args.min_vram}GB | location={loc_label}"
+        f" | sorted by {args.sort}"
+    )
     print()
 
 

@@ -254,7 +254,7 @@ tasks:
           RESULT=$(curl -sf http://localhost:11434/api/generate \
             -d "{
               \"model\": \"$MODEL\",
-              \"prompt\": \"Write a complete Terraform module for an AWS VPC with public and private subnets, NAT gateway, and route tables. Include all resource dependencies and outputs.\",
+              \"prompt\": \"Write a Terraform module for AWS VPC with subnets and NAT gateway.\",
               \"options\": {\"num_ctx\": 32768, \"num_predict\": 400},
               \"stream\": false
             }")
