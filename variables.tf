@@ -105,3 +105,14 @@ variable "interruptible" {
   type    = bool
   default = false
 }
+
+variable "gpu_type_priority" {
+  description = "GPU type priority: 'availability' (most available) or 'custom' (list order)"
+  type        = string
+  default     = "custom"
+
+  validation {
+    condition     = contains(["availability", "custom"], var.gpu_type_priority)
+    error_message = "gpu_type_priority must be 'availability' or 'custom'."
+  }
+}

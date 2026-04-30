@@ -9,7 +9,7 @@ resource "runpod_pod" "ollama" {
   compute_type         = "GPU"
   country_codes        = var.country_codes
   data_center_priority = "availability"
-  gpu_type_priority    = "availability"
+  gpu_type_priority    = var.gpu_type_priority
   interruptible        = var.interruptible
 
   ports             = ["22/tcp"]
@@ -82,4 +82,12 @@ output "pod_id" {
 
 output "ollama_models" {
   value = var.ollama_models
+}
+
+output "cost_per_hr" {
+  value = runpod_pod.ollama.cost_per_hr
+}
+
+output "actual_data_center" {
+  value = runpod_pod.ollama.actual_data_center
 }

@@ -254,7 +254,7 @@ tasks:
           RESULT=$(curl -sf http://localhost:11434/api/generate \
             -d "{
               \"model\": \"$MODEL\",
-              \"prompt\": \"Write a Terraform module for AWS VPC with subnets and NAT gateway.\",
+              \"prompt\": \"List AWS EC2 instance types with vCPU and memory in a markdown table.\",
               \"options\": {\"num_ctx\": 32768, \"num_predict\": 400},
               \"stream\": false
             }")

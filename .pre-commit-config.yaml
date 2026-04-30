@@ -9,11 +9,12 @@ repos:
       - id: terraform_fmt
       - id: terraform_validate
 
-  # Bash shellcheck
+  # Bash static analysis
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.11.0.1
     hooks:
       - id: shellcheck
+        files: ^scripts/
 
   # YAML linting
   - repo: https://github.com/adrienverge/yamllint.git
@@ -40,15 +41,10 @@ repos:
       - id: detect-private-key
       - id: end-of-file-fixer
 
-  # Python linting (for gpu_availability.py)
-  - repo: https://github.com/psf/black
-    rev: 26.3.1
-    hooks:
-      - id: black
-        language_version: python3
-
-  # Python style checks
+  # Python linting and formatting
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.12
     hooks:
       - id: ruff
+        args: [--fix]
+      - id: ruff-format
